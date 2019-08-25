@@ -73,8 +73,7 @@ pause>nul& goto :EOF
 :searchFunction
 call loadE.bat CurS CKey
 ::列出所有已经定义内敛函数\搜索包含指定字符串的内敛函数
-(call :_getLF)& (call :_call)& (call :_checkDepend)
-(%_call% ("CKey.exe") %_checkDepend%) || (echo 缺少CKey.exe& pause>nul& goto :EOF)
+(call :_getLF)& (call :_call)
 setlocal enabledelayedexpansion
 (for /f "delims=" %%i in (%~f0) do set curLine=%%i& if "!curLine:~0,2!"==":_" if "!curLine:~-1!" NEQ "_" echo !curLine:~1!)>>%temp%\functionList.tmp
 if "%2"=="" (for /f "delims=" %%i in (%temp%\functionList.tmp) do set /a functionIndex+=1& set function_!functionIndex!=%%i& set function_!functionIndex!=%%i) else (title [%2]& for /f "skip=2 delims=" %%i in ('find /i "%2" %temp%\functionList.tmp') do set /a functionIndex+=1& set function_!functionIndex!=%%i)
@@ -127,8 +126,9 @@ set "_strlen=do setlocal enabledelayedexpansion& set $=!%%1!#& set N=& (for %%a 
 
 :_strlen2
 ::计算字符串的字节数
+::注意:创建的临时文件应该具有唯一性[时间信息], 否则两个bat文件同时使用该函数会导致字节数计算错误
 ::IN[字符串变量名]    OUT[len]
-set "_strlen2=do setlocal enabledelayedexpansion& (>%temp%\str.tmp echo.!%%1!)& for %%i in (%temp%\str.tmp) do endlocal& set /a %%2=%%~zi-2" & goto :EOF
+set "_strlen2=do setlocal enabledelayedexpansion& set _timeStr=%time::=%& set _timeStr=!_timeStr: =!& (>%temp%\_strlen2_!_timeStr!.tmp echo.!%%1!)& for %%i in (%temp%\_strlen2_!_timeStr!.tmp) do endlocal& set /a %%2=%%~zi-2& del /q %%~i" & goto :EOF
 
 
 
@@ -180,9 +180,9 @@ set "_getRandomNum2=do setlocal enabledelayedexpansion& set /a maxIndex=%%2-%%1&
 
 :_getRandomColor
 ::获取一个随机颜色值
-::OUT[随机颜色值]
+::OUT[随机颜色值] {IN[是否包含前缀0]}
 if not defined _getRandomNum call :_getRandomNum
-set "_getRandomColor=do setlocal enabledelayedexpansion& set colorStr=abcdef123456789& (%_call% ("0 14 index") %_getRandomNum%)& for %%i in (!index!) do set color=!colorStr:~%%i,1!& for %%j in (!color!) do endlocal& set %%1=0%%j"& goto :EOF
+set "_getRandomColor=do setlocal enabledelayedexpansion& set colorStr=abcdef123456789& (%_call% ("0 14 index") %_getRandomNum%)& for %%i in (!index!) do set color=!colorStr:~%%i,1!& for %%j in (!color!) do if "%%2"=="" (endlocal& set %%1=0%%j) else (endlocal& set %%1=%%j)"& goto :EOF
 
 :_randomColor
 ::设置一个随机颜色
@@ -210,13 +210,24 @@ set "_upcase=do setlocal enabledelayedexpansion& set str=!%%1!& (for %%i in (A B
 
 :_px2colsLines
 ::像素值转cmd宽度高度值    cmd默认[点阵字体8x16], 即每个字符是8个像素宽，16个像素高
+::除不尽时使用[ceil]方式
 ::IN[pxWidth]    IN[pxHeight]    OUT[cols]    OUT[lines]    {IN[字体大小][查看属性字体选项卡]}
 set "_px2colsLines=do setlocal enabledelayedexpansion& (if "%%5"=="" (set fontSize=8x16) else (set fontSize=%%5))& (for /f "tokens=1,2 delims=x" %%i in ("!fontSize!") do set /a mod=%%1%%%%i& (if !mod!==0 (set offset=0) else (set offset=1))& set /a cols=%%1/%%i+offset& set /a mod=%%2%%%%j& (if !mod!==0 (set offset=0) else (set offset=1))& set /a lines=%%2/%%j+offset)& for /f "tokens=1,2 delims= " %%i in ("!cols! !lines!") do endlocal& set /a %%3=%%i, %%4=%%j"& goto :EOF
+
+
+:_px2colsLinesFloor
+::像素值转cmd宽度高度值    cmd默认[点阵字体8x16], 即每个字符是8个像素宽，16个像素高
+::除不尽时使用[floor]方式
+::IN[pxWidth]    IN[pxHeight]    OUT[cols]    OUT[lines]    {IN[字体大小][查看属性字体选项卡]}
+set "_px2colsLinesFloor=do setlocal enabledelayedexpansion& (if "%%5"=="" (set fontSize=8x16) else (set fontSize=%%5))& (for /f "tokens=1,2 delims=x" %%i in ("!fontSize!") do set /a cols=%%1/%%i& set /a lines=%%2/%%j)& for /f "tokens=1,2 delims= " %%i in ("!cols! !lines!") do endlocal& set /a %%3=%%i, %%4=%%j"& goto :EOF
+
+
 
 :_colsLines2px
 ::cmd宽度高度值转像素值    cmd默认[点阵字体8x16], 即每个字符是8个像素宽，16个像素高
 ::IN[cols]    IN[lines]    OUT[pxWidth]    OUT[pxHeight]    {IN[字体大小][查看属性字体选项卡]}
 set "_colsLines2px=do setlocal enabledelayedexpansion& (if "%%5"=="" (set fontSize=8x16) else (set fontSize=%%5))& for /f "tokens=1,2 delims=x" %%i in ("!fontSize!") do endlocal& set /a %%3=%%1*%%i, %%4=%%2*%%j"& goto :EOF
+
 
 :_getColsLines
 ::得到当前cmd屏幕宽度高度值
@@ -306,7 +317,7 @@ set "_getScreenSize=do for /f "tokens=1,2 delims==" %%i in ('wmic DESKTOPMONITOR
 :_getDeskWallpaperPath
 ::获取桌面壁纸路径
 ::OUT[桌面壁纸路径]
-set "_getDeskWallpaperPath=do for /f "skip=2 tokens=2* delims= " %%i in ('reg query "HKCU\Software\Microsoft\Internet Explorer\Desktop\General" /v WallpaperSource') do set %%1=%%j"& goto :EOF
+set "_getDeskWallpaperPath=do for /f "skip=2 tokens=2* delims= " %%i in ('reg query "HKEY_CURRENT_USER\Control Panel\Desktop" /v WallPaper') do set %%1=%%j"& goto :EOF
 
 
 
@@ -447,15 +458,12 @@ set "_showBlockASCII2=do setlocal enabledelayedexpansion& (for /l %%i in (1,1,!%
 ::指定次数播放音乐集, 需要工具gplay.exe支持
 ::IN[musicPaths][路径有空格加双引号][多个路径使用空格间隔]    IN[times][不写或者0表示循环]
 call loadE.bat gplay
-(if not defined _checkDepend call :_checkDepend)
-(%_call% ("gplay.exe") %_checkDepend%) || (echo 缺少gplay.exe& pause>nul& goto :EOF)
 set "_playMusicMini=do setlocal enabledelayedexpansion& (if "%%2"=="" (set times=) else (if %%2==0 (set times=) else (set times=1,1,%%2)))& (for /l %%i in (!times!) do %gplay% !%%1!>nul 2>nul)& endlocal"& goto :EOF
 
 :_playMusic
 ::指定播放模式播放音乐集, 需要gplay.exe支持
 ::IN[musicPaths][路径有空格加双引号][多个路径使用空格间隔]    IN[mode][单曲播放0\单曲循环1\顺序播放2\循环播放3\随机播放4]
 call loadE.bat gplay
-(if not defined _checkDepend call :_checkDepend)& (%_call% ("gplay.exe") %_checkDepend%) || (echo 缺少gplay.exe& pause>nul& goto :EOF)
 if not defined _getRandomNum call :_getRandomNum
 set "_playMusic=do setlocal enabledelayedexpansion& (if "%%2"=="" (set mode=0) else (set mode=%%2))& (if !mode!==0 set times=1,1,1& set musicPath=& for %%i in (!%%1!) do if not defined musicPath set musicPath=%%i)& (if !mode!==1 set times=& set musicPath=& for %%i in (!%%1!) do if "!musicPath!"=="" set musicPath=%%i)& (if !mode!==2 set times=1,1,1& set musicPath=!%%1!)& (if !mode!==3 set times=& set musicPath=!%%1!)& (if !mode!==4 set times=& set musicPath=!%%1!& set musicIndex=0& (for %%i in (!%%1!) do set /a musicIndex+=1& set musicPath_!musicIndex!=%%i)& set musicIndexMax=!musicIndex!)& (for /l %%i in (!times!) do (if !mode!==4 (%_call% ("1 !musicIndexMax! musicIndex") %_getRandomNum%)& for %%j in (!musicIndex!) do set musicPath=!musicPath_%%j!)& %gplay% !musicPath!>nul 2>nul)& endlocal"& goto :EOF
 
@@ -565,8 +573,45 @@ set "_showHR=do setlocal enabledelayedexpansion& (if "%%1" EQU "" (set hrElement
 
 
 
+:_getMinNum
+::取指定范围内的随机数
+::IN[数字1]    IN[数字2]    OUT[最小数]
+set "_getMinNum=do if %%1 GTR %%2 (set /a %%3=%%2) else (set /a %%3=%%1)"& goto :EOF
 
 
 
+:_getConsoleCurColor
+::获取cmd当前颜色
+::OUT[cmd当前颜色]
+set _getConsoleCurColorTemp=%%SystemRoot%%
+set "_getConsoleCurColor=do setlocal enabledelayedexpansion& for /f "skip=2 tokens=2* delims= " %%i in ('reg query "HKEY_CURRENT_USER\Console\%%_getConsoleCurColorTemp%%_system32_cmd.exe" /v ScreenColors') do endlocal& set %%1=%%j"& goto :EOF
 
+
+
+:_getThemeColor
+::获取当前主题颜色 颜色目前不是实时刷新的[不建议使用]
+::OUT[当前主题颜色]
+set "_getThemeColor=do for /f "skip=2 tokens=2* delims= " %%i in ('reg query "HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize" /v SpecialColor') do set %%1=%%j"& goto :EOF
+
+
+:_fillZero
+::对于数字小于10的进行补零操作
+::IN-OUT[数字变量名]
+set "_fillZero=do setlocal enabledelayedexpansion& set value=!%%~1!& for %%i in (!value!) do ((set /a flag=%%i*1 >nul 2>nul)& if "!flag!"=="!value!" (if !%%~1! LSS 10 (endlocal& set %%1=0%%i) else (endlocal& set %%1=%%i)) else (endlocal& set %%1=00))"& goto :EOF
+
+
+:_pass
+::占位语句, 什么也不做
+set "_pass=ver >nul"& goto :EOF
+
+
+:_getProxyStatus
+::获取系统代理设置状态
+::OUT[代理设置状态]
+set "_getProxyStatus=do for /f "skip=2 tokens=2* delims= " %%i in ('reg query "HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings" /v ProxyEnable') do set %%1=%%j"& goto :EOF
+
+
+:_updateSystemParameters
+::刷新系统参数[常用于修改注册表后]
+set "_updateSystemParameters=RunDll32.exe USER32.DLL, UpdatePerUserSystemParameters"& goto :EOF
 

@@ -22,4 +22,5 @@ if "%taskName%" EQU "" (
 	(%_call% ("taskName") %_uniqueStr%)
 )
 
+
 SCHTASKS /Create /SC DAILY /MO %intervalDay% /TN %taskName% /ST %time% /TR %file%
